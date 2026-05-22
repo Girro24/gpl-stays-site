@@ -26,6 +26,10 @@
     .msg.err { background: #3a1d1d; color: #f4b8b8; }
     .hp { position: absolute; left: -9999px; width: 1px; height: 1px; }
     footer { color: var(--muted); margin-top: 48px; font-size: 13px; text-align: center; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+    .dates-row { display: none; }
+    .dates-row.visible { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 520px) { .dates-row.visible { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -53,6 +57,14 @@
           <option value="other">Other</option>
         </select>
       </label>
+      <div id="dates-row" class="dates-row">
+        <label>Check-in
+          <input name="check_in" type="date" />
+        </label>
+        <label>Check-out
+          <input name="check_out" type="date" />
+        </label>
+      </div>
       <label>Message
         <textarea name="message" maxlength="2000" placeholder="Dates, property, questions, anything we should know"></textarea>
       </label>
@@ -82,6 +94,17 @@
     const form = document.getElementById("lead-form");
     const btn = document.getElementById("submit-btn");
     const msg = document.getElementById("form-msg");
+    const datesRow = document.getElementById("dates-row");
+    const leadTypeSelect = form.elements["lead_type"];
+
+    function toggleDates() {
+      const isBooking = leadTypeSelect.value === "guest_booking";
+      datesRow.classList.toggle("visible", isBooking);
+      form.elements["check_in"].required = isBooking;
+      form.elements["check_out"].required = isBooking;
+    }
+    leadTypeSelect.addEventListener("change", toggleDates);
+    toggleDates();
 
     function show(kind, text) {
       msg.className = "msg " + kind;
@@ -95,18 +118,33 @@
       const fd = new FormData(form);
       if (fd.get("website")) return;
 
+      const leadType = fd.get("lead_type") || "guest_booking";
+      const checkIn = (fd.get("check_in") || "").trim();
+      const checkOut = (fd.get("check_out") || "").trim();
       const payload = {
         name: (fd.get("name") || "").trim(),
         email: (fd.get("email") || "").trim(),
         phone: (fd.get("phone") || "").trim(),
         message: (fd.get("message") || "").trim(),
-        lead_type: fd.get("lead_type") || "guest_booking",
+        lead_type: leadType,
         source_url: window.location.href,
         turnstile_token: (document.querySelector("[name='cf-turnstile-response']") || {}).value || "",
       };
       if (!payload.name || !payload.email) {
         show("err", "Name and email are required.");
         return;
+      }
+      if (leadType === "guest_booking") {
+        if (!checkIn || !checkOut) {
+          show("err", "Please select check-in and check-out dates.");
+          return;
+        }
+        if (checkIn >= checkOut) {
+          show("err", "Check-out must be after check-in.");
+          return;
+        }
+        payload.check_in = checkIn;
+        payload.check_out = checkOut;
       }
 
       btn.disabled = true;
